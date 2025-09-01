@@ -1,0 +1,31 @@
+model_name_or_path: "E:/R1/TheBloke/Llama-2-7B-Chat-GGUF"
+model_type: "LLaMA"
+dataset: "custom"
+dataset_dir: "data"
+
+output_dir: "outputs"
+logging_dir: "logs"
+
+do_train: true
+overwrite_cache: false
+overwrite_output_dir: true
+
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+learning_rate: 2e-4
+max_steps: 1000
+warmup_steps: 100
+logging_steps: 10
+save_steps: 200
+save_total_limit: 2
+
+lora_rank: 8
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target: "q_proj,v_proj"
+
+max_source_length: 512
+max_target_length: 512
+preprocessing_num_workers: 4
+
+bf16: true
