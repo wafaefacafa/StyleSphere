@@ -48,14 +48,27 @@ pip install --upgrade bitsandbytes
 python e:\AI\llama2-train\train_python_real.py
 ```
 
-### 3. 修改训练参数
-如果需要调整训练时长，请编辑 `train_python_real.py`：
+### 3. "模型动物园" (切换模型) 🦁
+
+我们保留了项目早期所有的脚本作为历史见证，但建立了一个全新的 **`model_config.py`** 来管理现代 GPU 训练。
+
+不需要修改复杂的代码，只要编辑 `model_config.py` 里的 `SELECTED_MODEL_KEY`，就可以并在训练脚本和测试脚本之间自动同步配置。
 
 ```python
-# 修改这里来控制训练轮数
-NUM_EPOCHS = 3     # 训练 3 轮 (约 20 分钟)
-# MAX_STEPS = 100  # 或者使用固定步数
+# model_config.py
+
+# 取消注释您想要使用的模型：
+SELECTED_MODEL_KEY = "llama3-8b"
+# SELECTED_MODEL_KEY = "qwen2.5-7b"  <-- 想跑通义千问？改这里就行！
 ```
+
+目前支持的预设：
+*   **Llama 3 8B**: 综合能力最强
+*   **Qwen 2.5 7B**: 中文能力最强
+*   **Gemma 2 9B**: 谷歌最新技术
+*   **Mistral 7B**: 社区经典
+
+修改后，再次运行 `train_python_real.py` 就会自动下载新模型并开始训练。
 
 ## 📊 训练输出
 

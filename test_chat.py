@@ -4,12 +4,25 @@ from peft import PeftModel
 import os
 import sys
 
-# Paths
-BASE_MODEL_ID = "unsloth/llama-3-8b-Instruct"
-# Ensure we map the correct path relative to workspace root
-ADAPTER_PATH = "outputs/llama3_qlora_test"
+try:
+    from model_config import get_current_config
+except ImportError:
+    # Fallback
+    def get_current_config():
+        return {
+            "model_id": "unsloth/llama-3-8b-Instruct", 
+            "output_dir": "outputs/llama3_qlora_temp",
+            "name": "Fallback Llama 3"
+        }
+
+# Load configuration from Model Zoo automatically
+# Now you don't need to manually edit this file!
+config = get_current_config()
+BASE_MODEL_ID = config["model_id"]
+ADAPTER_PATH  = config["output_dir"]
 
 def main():
+    print(f"🦁 Test Chat - Loading Config: {config.get('name')}")
     # Force set CWD to workspace root if running from elsewhere/IDE to find outputs
     # (Optional safety check)
     if not os.path.exists(ADAPTER_PATH):

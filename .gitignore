@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 build/
@@ -20,13 +20,22 @@ wheels/
 .installed.cfg
 *.egg
 
-# 项目特定
+# Project Specific
 *.gguf
 temp_data/
 outputs/
-data/*.json
+data_backup/
 
-# 环境
+# Sensitive Data - BLOCK ALL JSONs by default
+*.json
+train.txt
+google_raw.txt
+
+# Whitelist config files if needed
+!adapter_config.json
+!config.json
+
+# Environment
 .env
 .venv
 env/
@@ -39,6 +48,6 @@ ENV/
 *.swp
 *.swo
 
-# 操作系统
+# OS
 .DS_Store
 Thumbs.db

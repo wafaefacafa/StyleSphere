@@ -11,14 +11,25 @@ from transformers import (
     BitsAndBytesConfig
 )
 from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+try:
+    from model_config import get_current_config
+except ImportError:
+    # Fallback if config is missing (safety net)
+    def get_current_config():
+        return {
+            "model_id": "unsloth/llama-3-8b-Instruct", 
+            "output_dir": "outputs/llama3_qlora_temp"
+        }
 
-# Configuration
-# Switching to Llama 3 8B with 4-bit Quantization (QLoRA)
-# using unsloth's ungated version for ease of access
-MODEL_ID = "unsloth/llama-3-8b-Instruct"
-# MAX_STEPS = 100  <-- Removed fixed steps
+# Load configuration from Model Zoo
+config = get_current_config()
+MODEL_ID = config["model_id"]
+OUTPUT_DIR = config["output_dir"]
+
+print(f"🦁 Using Model from Zoo: {config.get('name', MODEL_ID)}")
+print(f"📂 Output Directory: {OUTPUT_DIR}")
+
 NUM_EPOCHS = 3     # Train for 3 full passes over the data
-OUTPUT_DIR = "outputs/llama3_qlora_test"
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
