@@ -1,64 +1,74 @@
-from transformers import LlamaTokenizer
-from datasets import Dataset
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    Trainer,
+    DataCollatorForLanguageModeling
+)
+from datasets import load_dataset
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+import torch
 import yaml
-import os
-import json
-from llama_cpp import Llama
-import warnings
-
-warnings.filterwarnings('ignore')
-warnings.filterwarnings('ignore')
-
-# 设置环境
-os.environ['PYTHONWARNINGS'] = 'ignore'
 
 def create_and_prepare_model(config):
-    # 使用llama.cpp加载GGUF模型
-    model_path = os.path.join(config['model_name_or_path'], "llama-2-7b-chat.Q4_K_S.gguf")
-    print(f"加载GGUF模型: {model_path}")
-    
-    n_gpu_layers = 0 if config.get('use_cpu', False) else -1  # -1表示使用所有可用的GPU层
-    model = Llama(
-        model_path=model_path,
-        n_gpu_layers=n_gpu_layers,
-        n_ctx=2048,  # 上下文窗口大小
-        n_batch=config.get('per_device_train_batch_size', 1)
+    # 加载基础模型和分词器
+    model = AutoModelForCausalLM.from_pretrained(
+        config['model_name_or_path'],
+        torch_dtype=torch.float16,
+        load_in_4bit=True,
+        device_map="auto"
     )
     
-    # llama.cpp自带tokenizer
-    tokenizer = model
+    tokenizer = AutoTokenizer.from_pretrained(config['model_name_or_path'])
+    
+    # 准备LoRA配置
+    lora_config = LoraConfig(
+        r=config['lora_rank'],
+        lora_alpha=config['lora_alpha'],
+        lora_dropout=config['lora_dropout'],
+        bias="none",
+        task_type="CAUSAL_LM",
+        target_modules=config['lora_target'].split(',')
+    )
+    
+    # 准备用于训练的模型
+    model = prepare_model_for_kbit_training(model)
+    model = get_peft_model(model, lora_config)
     
     return model, tokenizer
 
 def prepare_dataset(tokenizer, config, data_path):
     # 加载数据集
-    with open(data_path, 'r', encoding='utf-8') as f:
-        dataset = json.load(f)
+    dataset = load_dataset("json", data_files=data_path)
     
-    # 预处理数据
-    processed_data = []
-    for item in dataset:
-        # 构建提示词训练格式
-        prompt_template = """[INST] <<SYS>>
-你是一个专业的AI助手，尝试用专业、准确的语言回答用户的问题。
-<</SYS>>
-
-{instruction}
-
-{input} [/INST]
-
-{output}
-
-</s>"""
-        # 填充模板
-        prompt = prompt_template.format(
-            instruction=item['instruction'],
-            input=item['input'],
-            output=item['output']
+    def preprocess_function(examples):
+        # 将指令和输出组合成完整的提示
+        prompts = [
+            f"### 指令：{instruction}\n### 输入：{input_text}\n### 响应：{output}"
+            for instruction, input_text, output in zip(
+                examples["instruction"],
+                examples["input"],
+                examples["output"]
+            )
+        ]
+        
+        # 对文本进行编码
+        tokenized = tokenizer(
+            prompts,
+            truncation=True,
+            max_length=config['max_source_length'],
+            padding="max_length"
         )
-        processed_data.append(prompt)
+        return tokenized
+
+    # 处理数据集
+    tokenized_dataset = dataset["train"].map(
+        preprocess_function,
+        batched=True,
+        remove_columns=dataset["train"].column_names
+    )
     
-    return processed_data
+    return tokenized_dataset
 
 def train(config_path="e:/AI/llama2-train/test_config.yaml", data_path="e:/AI/llama2-train/data/test_train.json"):
     # 加载配置
@@ -71,36 +81,44 @@ def train(config_path="e:/AI/llama2-train/test_config.yaml", data_path="e:/AI/ll
     
     # 准备数据集
     print("正在准备数据集...")
-    data = prepare_dataset(tokenizer, config, data_path)
+    train_dataset = prepare_dataset(tokenizer, config, data_path)
+    
+    # 设置训练参数
+    training_args = TrainingArguments(
+        output_dir=config['output_dir'],
+        per_device_train_batch_size=config['per_device_train_batch_size'],
+        gradient_accumulation_steps=config['gradient_accumulation_steps'],
+        learning_rate=config['learning_rate'],
+        max_steps=config['max_steps'],
+        warmup_steps=config['warmup_steps'],
+        logging_steps=config['logging_steps'],
+        save_steps=config['save_steps'],
+        save_total_limit=config['save_total_limit'],
+        bf16=config['bf16'],
+        remove_unused_columns=False
+    )
+    
+    # 创建数据收集器
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm=False
+    )
+    
+    # 创建训练器
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        data_collator=data_collator
+    )
     
     print("开始训练...")
+    # 开始训练
+    trainer.train()
     
-    # 使用llama.cpp进行训练
-    for epoch in range(config['max_steps']):
-        for i, text in enumerate(data):
-            # 使用模型生成
-            # 使用模型生成
-            response = model.create_completion(
-                text,
-                max_tokens=config['max_target_length'],
-                temperature=0.7,
-                top_p=0.95,
-                repeat_penalty=1.1,
-                echo=False,
-                stream=False
-            )
-            
-            # 获取生成的文本
-            if isinstance(response, dict) and 'choices' in response and len(response['choices']) > 0:
-                generated_text = response['choices'][0]['text']
-            else:
-                generated_text = "无生成结果"
-            
-            print(f"Epoch {epoch+1}, Step {i+1}/{len(data)}")
-            print(f"Input text: {text}")
-            print(f"Generated: {generated_text}\n")
-    
-    print("训练完成")
+    # 保存模型
+    print(f"保存模型到 {config['output_dir']}")
+    trainer.save_model()
 
 if __name__ == "__main__":
     train()

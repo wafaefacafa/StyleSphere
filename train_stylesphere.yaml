@@ -1,0 +1,50 @@
+model_name_or_path: "E:/R1/TheBloke/Llama-2-7B-Chat-GGUF/llama-2-7b-chat.Q4_K_S.gguf"
+model_type: "LLaMA"
+dataset: "stylesphere"
+
+# Llama.cpp model parameters
+model_params:
+  n_gpu_layers: 0 # 纯CPU运行，避免GPU尝试
+
+# 使用时尚顾问相关的数据集
+train_data: "E:/AI/data/stylesphere_combined.json"
+val_data: "E:/AI/data/fashion_mnist_train.json"
+
+output_dir: "outputs/stylesphere-v1"
+logging_dir: "logs/stylesphere"
+
+do_train: true
+overwrite_cache: false
+overwrite_output_dir: true
+
+# 优化的批次处理参数
+per_device_train_batch_size: 2  # 增加批次大小以捕捉更多语义关系
+gradient_accumulation_steps: 8   # 减少累积步数以加快训练
+gradient_checkpointing: true
+gradient_clipping: 1.0
+
+# 优化的学习率策略
+learning_rate: 0.00003          # 降低学习率以获得更稳定的训练
+max_steps: 100                  # 临时改为在CPU上跑100步
+warmup_steps: 300               # 增加预热步数
+logging_steps: 20               # 更频繁的日志记录
+save_steps: 200                 # 更频繁的保存
+save_total_limit: 3             # 保存最近的3个检查点
+
+# 增强的LoRA设置
+lora_rank: 64                   # 增加rank以提升模型表达能力
+lora_alpha: 128
+lora_dropout: 0.05             # 减少dropout以保持时尚知识的连贯性
+weight_decay: 0.01
+lora_target: "q_proj,v_proj,k_proj,o_proj,gate_proj"  # 添加gate_proj
+
+# 使用带重
+lr_scheduler_type: "cosine_with_restarts"  # 有助于跳出局部最优
+
+# 增加序列长度以适应更长的中文输入
+max_source_length: 2048  # 增加长度以适应详细的时尚建议
+max_target_length: 2048
+preprocessing_num_workers: 4
+
+# 启用混合精度训练
+bf16: true

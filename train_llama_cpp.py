@@ -9,7 +9,7 @@ import numpy as np
 from typing import List, Dict, Any
 
 # 配置参数
-MODEL_PATH = "E:/R1/TheBloke/Llama-2-7B-Chat-GGUF/llama-2-7b-chat.Q4_K_S.gguf"
+MODEL_PATH = "e:/AI/models/Llama-3-8B-Instruct-Q4_K_M.gguf"
 INITIAL_LR = 5e-4  # 初始学习率
 MIN_LR = 1e-5  # 最小学习率
 BATCH_SIZE = 1
@@ -26,10 +26,15 @@ def load_training_data(file_path="data/train.json"):
     return data
 
 def format_prompt(instruction, input_text=""):
-    """格式化提示模板"""
-    if input_text:
-        return f"[INST] {instruction}\n{input_text} [/INST]"
-    return f"[INST] {instruction} [/INST]"
+    """格式化提示模板 - Llama 3"""
+    system_prompt = "You are a helpful assistant."
+    user_content = f"{instruction}\n{input_text}" if input_text else instruction
+    
+    return (
+        f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
+        f"<|start_header_id|>user<|end_header_id|>\n\n{user_content}<|eot_id|>"
+        f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+    )
 
 def get_learning_rate(current_step, total_steps):
     """实现带warmup的余弦学习率调度"""
