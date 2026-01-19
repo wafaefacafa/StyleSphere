@@ -1,6 +1,8 @@
 import json
 import os
 import torch
+import time
+import gc
 from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM,
@@ -11,6 +13,11 @@ from transformers import (
     BitsAndBytesConfig
 )
 from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+
+# Set HF Mirror for connection issues
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+
 try:
     from model_config import get_current_config
 except ImportError:
@@ -29,7 +36,14 @@ OUTPUT_DIR = config["output_dir"]
 print(f"🦁 Using Model from Zoo: {config.get('name', MODEL_ID)}")
 print(f"📂 Output Directory: {OUTPUT_DIR}")
 
-NUM_EPOCHS = 3     # Train for 3 full passes over the data
+# ==========================================
+# ⚙️ 训练策略设置 (Training Strategy)
+# ==========================================
+SYSTEM_PROMPT = "你是一个智能助手。请全程使用中文回答用户的问题，保持专业和友善。"
+CYCLES = 5          # 循环次数 (总共跑几轮)
+START_CYCLE = 2     # 从第几轮开始 (如果之前中断了，可以修改这个数字续借)
+EPOCHS_PER_CYCLE = 3 # 每次跑 3 个 Epoch
+WAIT_SECONDS = 30    # 每次休息 30 秒 (增加休息时间以缓解过热/显存碎片)
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -51,6 +65,7 @@ def main():
             user_msg += "\n" + inp
             
         messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
             {"role": "assistant", "content": out}
         ]
@@ -124,12 +139,11 @@ def main():
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4,
         warmup_steps=10,
-        # max_steps=MAX_STEPS,   <-- Replaced with epochs
-        num_train_epochs=NUM_EPOCHS,
+        num_train_epochs=EPOCHS_PER_CYCLE, # Initial Goal
         learning_rate=2e-4,
         fp16=True,                  # Use FP16 for training stability on GPU
         logging_steps=10,
-        save_strategy="no",
+        save_strategy="epoch",      # Save every epoch so we can resume
         optim="paged_adamw_32bit",   # Optimizer optimized for VRAM (requires bitsandbytes)
         gradient_checkpointing=True, # Critical for saving VRAM
     )
@@ -141,11 +155,41 @@ def main():
         data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
     )
     
-    print(f"🚀 Starting training ({NUM_EPOCHS} epochs)...")
-    trainer.train()
+    print(f"🚀 Starting Cyclic Training: {CYCLES} Cycles x {EPOCHS_PER_CYCLE} Epochs")
+    print(f"   Total Planned: {CYCLES * EPOCHS_PER_CYCLE} Epochs")
+    print(f"   Resuming from Cycle: {START_CYCLE}")
+
+    for i in range(START_CYCLE, CYCLES + 1):
+        print(f"\n🔄 CYCLE {i}/{CYCLES} STARTING...")
+        
+        # Update target epochs for *this* run (cumulative)
+        target_epochs = i * EPOCHS_PER_CYCLE
+        trainer.args.num_train_epochs = target_epochs
+        
+        # Resume from checkpoint if not the first cycle or if resuming mid-stream
+        # 只要不是第一轮，或者文件夹里已有对应的checkpoint，通常建议开启resume
+        resume = True if i > 1 else False
+        
+        try:
+            trainer.train(resume_from_checkpoint=resume)
+        except ValueError as e:
+            print(f"⚠️ Resume failed or checkpoint mismatch: {e}")
+            print("Trying to continue without resume (may restart epoch count if not careful)...")
+            trainer.train(resume_from_checkpoint=False)
+        
+        print(f"✅ Cycle {i} Complete.")
+        model.save_pretrained(OUTPUT_DIR)
+        
+        # Explicit memory cleanup
+        print("🧹 Cleaning up GPU memory...")
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+        if i < CYCLES:
+            print(f"☕ Resting for {WAIT_SECONDS} seconds to cool down GPU...")
+            time.sleep(WAIT_SECONDS)
     
-    print(f"✅ Training complete. Saved to {OUTPUT_DIR}")
-    model.save_pretrained(OUTPUT_DIR)
+    print(f"🎉 All {CYCLES} cycles complete. Final model saved to {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     main()

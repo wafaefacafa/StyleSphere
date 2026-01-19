@@ -4,14 +4,28 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import os
 import shutil
 
-# Configuration
-BASE_MODEL_ID = "unsloth/llama-3-8b-Instruct"
-ADAPTER_PATH = "outputs/llama3_qlora_test"
-MERGED_OUTPUT_PATH = "outputs/llama3_8b_custom_merged"
+try:
+    from model_config import get_current_config
+except ImportError:
+    # Fallback
+    def get_current_config():
+        return {
+            "model_id": "unsloth/llama-3-8b-Instruct", 
+            "output_dir": "outputs/llama3_qlora_test",
+            "name": "Fallback Llama 3"
+        }
+
+# Load configuration dynamically
+config = get_current_config()
+BASE_MODEL_ID = config["model_id"]
+ADAPTER_PATH = config["output_dir"]
+MERGED_OUTPUT_PATH = f"{ADAPTER_PATH}_merged_full"  # Auto-generate name based on adapter path
 
 def main():
-    print(f"⚠️  ATTENTION: Merging requires ~16GB of System RAM (CPU) for Llama-3-8B in FP16.")
-    print(f"    Current output path: {MERGED_OUTPUT_PATH}")
+    print(f"🦁 Model: {config.get('name')}")
+    print(f"⚠️  ATTENTION: Merging requires ~16GB of System RAM (CPU) for 8B models in FP16.")
+    print(f"    Adapter Path:        {ADAPTER_PATH}")
+    print(f"    Merged Output Path:  {MERGED_OUTPUT_PATH}")
     
     # 1. Load Base Model in FP16 (CPU)
     # We use CPU because 8GB VRAM is not enough to hold the full FP16 model for merging

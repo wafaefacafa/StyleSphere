@@ -15,7 +15,7 @@ MODEL_ZOO = {
     "llama3-8b": {
         "name": "Llama 3 8B Instruct",
         "model_id": "unsloth/llama-3-8b-Instruct",
-        "output_dir": "outputs/llama3_qlora_v1",
+        "output_dir": "outputs/llama3_qlora_test",
         "description": "Meta最新一代模型，智能程度高，通用性强。"
     },
     "qwen2.5-7b": {
